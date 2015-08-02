@@ -11,7 +11,15 @@ object Lexer {
    * A representation of a lexed Token. Value is optional, is it is
    * not needed for punctuators like BANG or PAREN_L.
    */
-  case class Token(kind: TokenKind, start: Int, end: Int, value: Option[String] = None)
+  case class Token(kind: TokenKind, start: Int, end: Int, value: Option[String] = None) {
+    /**
+     * A helper function to describe a token as a string for debugging
+     */
+    def getTokenDesc: String = value match {
+      case Some(v) => getTokenKindDesc(kind) + " \"" + v + "\""
+      case None => getTokenKindDesc(kind)
+    }
+  }
 
   type Lexer = Option[Int] => Token
 
@@ -65,14 +73,6 @@ object Lexer {
     val INT = 17
     val FLOAT = 18
     val STRING = 19
-  }
-
-  /**
-   * A helper function to describe a token as a string for debugging
-   */
-  def getTokenDesc(token: Token): String = token.value match {
-    case Some(value) => getTokenKindDesc(token.kind) + " \"" + value + "\""
-    case None => getTokenKindDesc(token.kind)
   }
 
   /**
