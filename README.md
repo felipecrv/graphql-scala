@@ -6,6 +6,7 @@ of GraphQL.](http://github.com/graphql/graphql-js)
 GraphQL is a query language created by Facebook for describing data requirements
 on complex application data models.
 
+[![Build Status](https://travis-ci.org/philix/graphql-scala.svg)](https://travis-ci.org/philix/graphql-scala)
 [![General GraphQL Slack Discussion](https://graphql-slack.herokuapp.com/badge.svg)](https://graphql-slack.herokuapp.com/)
 
 ## Code
