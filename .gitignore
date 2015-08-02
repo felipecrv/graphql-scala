@@ -4,7 +4,8 @@ tags
 .*.swo
 
 # Eclipse (Scala IDE)
-build
+build/
+bin/
 .classpath
 .project
 .settings
