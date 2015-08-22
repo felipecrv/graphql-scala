@@ -236,7 +236,7 @@ object Lexer {
    * or an int depending on whether a decimal point appears.
    *
    * Int:   -?(0|[1-9][0-9]*)
-   * Float: -?(0|[1-9][0-9]*)\.[0-9]+(e-?[0-9]+)?
+   * Float: -?(0|[1-9][0-9]*)(\.[0-9]+)?((E|e)(+|-)?[0-9]+)?
    */
   def readNumber(source: Source, start: Int, firstCode: Int): Token = {
     var code = firstCode
@@ -244,20 +244,20 @@ object Lexer {
     var position = start
     var isFloat = false
 
-    def getCode: Int = if (position >= body.length) 0 else charCodeAt(body, position)
+    def consumeCharCode: Int = {
+      position += 1
+      if (position >= body.length) 0 else charCodeAt(body, position)
+    }
 
     if (code == 45) { // -
-      position += 1
-      code = getCode
+      code = consumeCharCode
     }
 
     if (code == 48) { // 0
-      position += 1
-      code = getCode
+      code = consumeCharCode
     } else if (code >= 49 && code <= 57) { // 1 - 9
       do {
-        position += 1
-        code = getCode
+        code = consumeCharCode
       } while (code >= 48 && code <= 57) // 0 - 9
     } else {
       throw syntaxError(source, position, "Invalid number.")
@@ -266,32 +266,29 @@ object Lexer {
     if (code == 46) { // .
       isFloat = true
 
-      position += 1
-      code = getCode
+      code = consumeCharCode
       if (code >= 48 && code <= 57) { // 0 - 9
         do {
-          position += 1
-          code = getCode
+          code = consumeCharCode
         } while (code >= 48 && code <= 57) // 0 - 9
       } else {
         throw syntaxError(source, position, "Invalid number.")
       }
+    }
 
-      if (code == 101) { // e
-        position += 1
-        code = getCode
-        if (code == 45) { // -
-          position += 1
-          code = getCode
-        }
-        if (code >= 48 && code <= 57) { // 0 - 9
-          do {
-            position += 1
-            code = getCode
-          } while (code >= 48 && code <= 57) // 0 - 9
-        } else {
-          throw syntaxError(source, position, "Invalid number.")
-        }
+    if (code == 69 || code == 101) { // E e
+      isFloat = true
+
+      code = consumeCharCode
+      if (code == 43 || code == 45) { // + -
+        code = consumeCharCode
+      }
+      if (code >= 48 && code <= 57) { // 0 - 9
+        do {
+          code = consumeCharCode
+        } while (code >= 48 && code <= 57) // 0 - 9
+      } else {
+        throw syntaxError(source, position, "Invalid number.")
       }
     }
 

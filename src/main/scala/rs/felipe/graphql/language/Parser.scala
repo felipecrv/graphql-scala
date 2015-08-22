@@ -215,7 +215,7 @@ object Parser {
       val variable = parseVariable
       expect(TokenKind.COLON)
       val _type = parseType
-      val defaultValue = if (skip(TokenKind.EQUALS)) Some(parseValue(true)) else None
+      val defaultValue = if (skip(TokenKind.EQUALS)) Some(parseValueLiteral(true)) else None
 
       VariableDefinition(variable, _type, defaultValue, loc(start))
     }
@@ -270,7 +270,7 @@ object Parser {
 
       val name = parseName
       expect(TokenKind.COLON)
-      val value = parseValue(false)
+      val value = parseValueLiteral(false)
       Argument(name, value, loc(start))
     }
 
@@ -283,27 +283,34 @@ object Parser {
     def parseFragment: Either[FragmentSpread, InlineFragment] = {
       val start = token.start
       expect(TokenKind.SPREAD)
-      if (token.value == "on") {
+      if (token.value.map(_ == "on").getOrElse(false)) {
         advance
-        val typeCondition = parseName
+        val typeCondition = parseNamedType
         val directives = parseDirectives
         val selectionSet = parseSelectionSet
         Right(InlineFragment(typeCondition, Some(directives), selectionSet, loc(start)))
       } else {
-        val name = parseName
+        val name = parseFragmentName
         val directives = parseDirectives
         Left(FragmentSpread(name, Some(directives), loc(start)))
       }
+    }
+
+    def parseFragmentName: Name = {
+      if (token.value.map(_ == "on").getOrElse(false)) {
+        throw unexpected()
+      }
+      parseName
     }
 
     def parseFragmentDefinition: FragmentDefinition = {
       val start = token.start
 
       expectKeyword("fragment")
-      val name = parseName
+      val name = parseFragmentName
 
       expectKeyword("on")
-      val typeCondition = parseName
+      val typeCondition = parseNamedType
 
       val directives = parseDirectives
       val selectionSet = parseSelectionSet
@@ -314,16 +321,16 @@ object Parser {
 
     // Implements the parsing rules in the Values section.
 
-    def parseVariableValue: Value = parseValue(false)
+    def parseConstValue: Value = parseValueLiteral(true)
 
-    def parseConstValue: Value = parseValue(true)
+    def parseVariableValue: Value = parseValueLiteral(false)
 
-    def parseValue(isConst: Boolean): Value = {
+    def parseValueLiteral(isConst: Boolean): Value = {
       val _token = token
       val start = _token.start
 
       _token.kind match {
-        case TokenKind.BRACKET_L => return parseArray(isConst)
+        case TokenKind.BRACKET_L => return parseList(isConst)
         case TokenKind.BRACE_L => return parseObject(isConst)
         case TokenKind.INT => {
           advance
@@ -338,11 +345,20 @@ object Parser {
           StringValue(_token.value.getOrElse(""), loc(start))
         }
         case TokenKind.NAME => {
-          advance
           _token.value match {
-            case Some("true") => BooleanValue(true, loc(start))
-            case Some("false") => BooleanValue(false, loc(start))
-            case Some(value) => EnumValue(value, loc(start))
+            case Some("true") => {
+              advance
+              BooleanValue(true, loc(start))
+            }
+            case Some("false") => {
+              advance
+              BooleanValue(false, loc(start))
+            }
+            case Some("null") => throw unexpected()
+            case Some(value) => {
+              advance
+              EnumValue(value, loc(start))
+            }
             case _ => throw unexpected()
           }
         }
@@ -357,11 +373,11 @@ object Parser {
       }
     }
 
-    def parseArray(isConst: Boolean): ArrayValue = {
+    def parseList(isConst: Boolean): ListValue = {
       val start = token.start
       val item: ParseFn[Value] = if (isConst) _.parseConstValue else _.parseVariableValue
       val values = any(TokenKind.BRACKET_L, item, TokenKind.BRACKET_R)
-      ArrayValue(values, loc(start))
+      ListValue(values, loc(start))
     }
 
     def parseObject(isConst: Boolean): ObjectValue = {
@@ -384,7 +400,7 @@ object Parser {
       fieldNames(name.value) = true
 
       expect(TokenKind.COLON)
-      val value = parseValue(isConst)
+      val value = parseValueLiteral(isConst)
 
       ObjectField(name, value, loc(start))
     }
@@ -409,7 +425,7 @@ object Parser {
     // Implements the parsing rules in the Types section.
 
     /**
-     * Handles the Type: TypeName, ListType, and NonNullType parsing rules.
+     * Handles the Type: NamedType, ListType, and NonNullType parsing rules.
      */
     def parseType: Type = {
       val start = token.start
@@ -420,7 +436,7 @@ object Parser {
           expect(TokenKind.BRACKET_R)
           Right(ListType(itemType, loc(start)))
         } else {
-          Left(parseName)
+          Left(parseNamedType)
         }
 
       if (skip(TokenKind.BANG)) {
@@ -428,6 +444,11 @@ object Parser {
       } else {
         _type.left.getOrElse(_type.right.get)
       }
+    }
+
+    def parseNamedType: NamedType = {
+      val start = token.start
+      NamedType(parseName, loc(start))
     }
   }
 
@@ -440,7 +461,19 @@ object Parser {
     parser.parseDocument
   }
 
-  def parse(sourceStr: String): Document = {
-    parse(Source(sourceStr))
+  def parse(sourceStr: String): Document = parse(Source(sourceStr))
+
+  /**
+   * Given a string containing a GraphQL value, parse the AST for that value.
+   * Throws GraphQLError if a syntax error is encountered.
+   *
+   * This is useful within tools that operate upon GraphQL Values directly and
+   * in isolation of complete GraphQL documents.
+   */
+  def parseValue(source: Source, options: ParseOptions = ParseOptions()): Value = {
+    val parser = Parser(source, options)
+    parser.parseValueLiteral(false)
   }
+
+  def parseValue(sourceStr: String): Value = parseValue(Source(sourceStr))
 }

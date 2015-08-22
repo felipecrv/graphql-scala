@@ -174,9 +174,21 @@ class LexerSpec extends FunSpec {
 
       lexOne("0.123") shouldBe Token(TokenKind.FLOAT, 0, 5, Some("0.123"))
 
+      lexOne("123e4") shouldBe Token(TokenKind.FLOAT, 0, 5, Some("123e4"))
+
+      lexOne("123E4") shouldBe Token(TokenKind.FLOAT, 0, 5, Some("123E4"))
+
+      lexOne("123e-4") shouldBe Token(TokenKind.FLOAT, 0, 6, Some("123e-4"))
+
+      lexOne("123e+4") shouldBe Token(TokenKind.FLOAT, 0, 6, Some("123e+4"))
+
       lexOne("-1.123e4") shouldBe Token(TokenKind.FLOAT, 0, 8, Some("-1.123e4"))
 
+      lexOne("-1.123E4") shouldBe Token(TokenKind.FLOAT, 0, 8, Some("-1.123E4"))
+
       lexOne("-1.123e-4") shouldBe Token(TokenKind.FLOAT, 0, 9, Some("-1.123e-4"))
+
+      lexOne("-1.123e+4") shouldBe Token(TokenKind.FLOAT, 0, 9, Some("-1.123e+4"))
 
       lexOne("-1.123e4567") shouldBe Token(TokenKind.FLOAT, 0, 11, Some("-1.123e4567"))
 
@@ -198,6 +210,13 @@ class LexerSpec extends FunSpec {
                 |     ^
                 |""".stripMargin)
 
+      (the [GraphQLError] thrownBy lexErr(".123")).message should
+        equal("""Syntax Error GraphQL (1:1) Unexpected character ".".
+                |
+                |1: .123
+                |   ^
+                |""".stripMargin)
+
       (the [GraphQLError] thrownBy lexErr("1.A")).message should
         equal("""Syntax Error GraphQL (1:3) Invalid number.
                 |
@@ -210,13 +229,6 @@ class LexerSpec extends FunSpec {
                 |
                 |1: -A
                 |    ^
-                |""".stripMargin)
-
-      (the [GraphQLError] thrownBy lexErr("1.0e+4")).message should
-        equal("""Syntax Error GraphQL (1:5) Invalid number.
-                |
-                |1: 1.0e+4
-                |       ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.0e")).message should

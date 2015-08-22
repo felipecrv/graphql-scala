@@ -11,6 +11,12 @@ import rs.felipe.graphql.language.Parser._
 
 class ParserSpec extends FunSpec {
   describe("Parser") {
+    it("acepts option to not include source") {
+      parse(Source("{ field }"), ParseOptions(false, true)) should matchPattern {
+        case Document(_, Some(Location(_, _, None))) =>
+      }
+    }
+
     it("parse provides useful errors") {
 
       (the [GraphQLError] thrownBy parse("""  { ...MissingOn }
@@ -49,10 +55,50 @@ class ParserSpec extends FunSpec {
         startWith("Syntax Error GraphQL (1:22) Duplicate input object field a.")
     }
 
+    it("does not accept fragments named \"on\"") {
+      (the [GraphQLError] thrownBy parse("fragment on on on { on }")).message should
+        startWith("Syntax Error GraphQL (1:10) Unexpected Name \"on\"")
+    }
+
+    it("does not accept fragments spread of \"on\"") {
+      (the [GraphQLError] thrownBy parse("{ ...on }")).message should
+        startWith("Syntax Error GraphQL (1:9) Expected Name, found }")
+    }
+
+    it("does not allow null as value") {
+      (the [GraphQLError] thrownBy parse("{ fieldWithNullableStringInput(input: null) }")).message
+        startWith("Syntax Error GraphQL (1:39) Unexpected Name \"null\"")
+    }
+
     it("parses kitchen sink") {
       val kitchenSinkURL = getClass.getResource("/kitchen-sink.graphql")
       val kitchenSink = scala.io.Source.fromURL(kitchenSinkURL).mkString
       parse(Source(kitchenSink))
+    }
+
+    it("allows non-keywords anywhere a Name is allowed") {
+      val nonKeywords = List(
+        "on",
+        "fragment",
+        "query",
+        "mutation",
+        "true",
+        "false"
+      )
+      nonKeywords foreach {
+        keyword => {
+          // You can't define or reference a fragment named `on`.
+          val fragmentName = if (keyword === "on") "a" else keyword
+
+        parse(s"""query ${keyword} {
+  ... $fragmentName
+  ... on $keyword { field }
+}
+fragment $fragmentName on Type {
+  $keyword($keyword: $$keyword) @$keyword($keyword: $keyword)
+}""")
+        }
+      }
     }
 
     it("parse creates ast") {

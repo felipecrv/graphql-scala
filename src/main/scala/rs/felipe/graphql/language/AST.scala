@@ -38,7 +38,7 @@ object AST {
    *           StringValue
    *           BooleanValue
    *           EnumValue
-   *           ArrayValue
+   *           ListValue
    *           ObjectValue
    *       ObjectField
    *       Directive
@@ -70,11 +70,10 @@ object AST {
   object Mutation extends Operation
 
   object Operation {
-    def apply(s: String): Operation = {
-      s match {
+    def apply(s: String): Operation = s match {
       case "query" => Query
       case "mutation" => Mutation
-    }}
+    }
   }
 
   case class OperationDefinition(
@@ -121,14 +120,14 @@ object AST {
     loc: Option[Location]) extends Selection("FragmentSpread", directives)
 
   case class InlineFragment(
-    typeCondition: Name,
+    typeCondition: NamedType,
     directives: Option[ArrayBuffer[Directive]],
     selectionSet: SelectionSet,
     loc: Option[Location]) extends Selection("InlineFragment", directives)
 
   case class FragmentDefinition(
     name: Name,
-    typeCondition: Name,
+    typeCondition: NamedType,
     directives: Option[ArrayBuffer[Directive]],
     selectionSet: SelectionSet,
     loc: Option[Location]) extends Definition("FragmentDefinition", directives, selectionSet)
@@ -152,7 +151,7 @@ object AST {
 
   case class EnumValue(value: String, loc: Option[Location]) extends Value("EnumValue")
 
-  case class ArrayValue(values: ArrayBuffer[Value], loc: Option[Location]) extends Value("ArrayValue")
+  case class ListValue(values: ArrayBuffer[Value], loc: Option[Location]) extends Value("ListValue")
 
   case class ObjectValue(fields: ArrayBuffer[ObjectField], loc: Option[Location]) extends Value("ObjectValue")
 
@@ -174,9 +173,9 @@ object AST {
 
   abstract class Type(kind: NodeKind) extends Node(kind)
 
-  // Name is also a subclass of Type
+  case class NamedType(name: Name, loc: Option[Location]) extends Type("NamedType")
 
   case class ListType(_type: Type, loc: Option[Location]) extends Type("ListType")
 
-  case class NonNullType(_type: Either[Name, ListType], loc: Option[Location]) extends Type("NonNullType")
+  case class NonNullType(_type: Either[NamedType, ListType], loc: Option[Location]) extends Type("NonNullType")
 }
