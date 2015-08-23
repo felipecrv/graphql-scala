@@ -168,8 +168,6 @@ class LexerSpec extends FunSpec {
 
       lexOne("0") shouldBe Token(TokenKind.INT, 0, 1, Some("0"))
 
-      lexOne("00") shouldBe Token(TokenKind.INT, 0, 1, Some("0"))
-
       lexOne("-4.123") shouldBe Token(TokenKind.FLOAT, 0, 6, Some("-4.123"))
 
       lexOne("0.123") shouldBe Token(TokenKind.FLOAT, 0, 5, Some("0.123"))
@@ -196,6 +194,13 @@ class LexerSpec extends FunSpec {
 
     it("lex reports useful number errors") {
 
+      (the [GraphQLError] thrownBy lexErr("00")).message should
+        equal("""Syntax Error GraphQL (1:2) Invalid number, unexpected digit after 0: "0".
+                |
+                |1: 00
+                |    ^
+                |""".stripMargin)
+
       (the [GraphQLError] thrownBy lexErr("+1")).message should
         equal("""Syntax Error GraphQL (1:1) Unexpected character "+".
                 |
@@ -204,7 +209,7 @@ class LexerSpec extends FunSpec {
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.")).message should
-        equal("""Syntax Error GraphQL (1:3) Invalid number.
+        equal("""Syntax Error GraphQL (1:3) Invalid number, expected digit but got: EOF.
                 |
                 |1: 1.
                 |     ^
@@ -218,28 +223,28 @@ class LexerSpec extends FunSpec {
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.A")).message should
-        equal("""Syntax Error GraphQL (1:3) Invalid number.
+        equal("""Syntax Error GraphQL (1:3) Invalid number, expected digit but got: "A".
                 |
                 |1: 1.A
                 |     ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("-A")).message should
-        equal("""Syntax Error GraphQL (1:2) Invalid number.
+        equal("""Syntax Error GraphQL (1:2) Invalid number, expected digit but got: "A".
                 |
                 |1: -A
                 |    ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.0e")).message should
-        equal("""Syntax Error GraphQL (1:5) Invalid number.
+        equal("""Syntax Error GraphQL (1:5) Invalid number, expected digit but got: EOF.
                 |
                 |1: 1.0e
                 |       ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.0eA")).message should
-        equal("""Syntax Error GraphQL (1:5) Invalid number.
+        equal("""Syntax Error GraphQL (1:5) Invalid number, expected digit but got: "A".
                 |
                 |1: 1.0eA
                 |       ^
@@ -301,5 +306,24 @@ class LexerSpec extends FunSpec {
                 |""".stripMargin)
 
     }
+  }
+
+  it("lex reports useful information for dashes in names") {
+    val source = Source("a-b")
+
+    val lexToken = {
+      val token = lex(source)
+      token
+    }
+
+    val firstToken = lexToken(None)
+    firstToken shouldBe Token(TokenKind.NAME, 0, 1, Some("a"))
+
+    (the [GraphQLError] thrownBy lexToken(None)).message should
+      equal("""Syntax Error GraphQL (1:3) Invalid number, expected digit but got: "b".
+              |
+              |1: a-b
+              |     ^
+              |""".stripMargin)
   }
 }

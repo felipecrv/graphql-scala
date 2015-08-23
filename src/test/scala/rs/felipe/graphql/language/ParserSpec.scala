@@ -19,6 +19,24 @@ class ParserSpec extends FunSpec {
 
     it("parse provides useful errors") {
 
+      val caughtError = ({
+        try {
+          parse("{")
+          None
+        } catch {
+          case error: GraphQLError => Some(error)
+        }
+      }).get
+
+      caughtError.message should startWith("Syntax Error GraphQL (1:2) Expected Name, found EOF")
+      caughtError.positions.get.length shouldBe(1)
+      caughtError.positions.get(0) shouldBe(1)
+
+      caughtError.locations.get.length shouldBe(1)
+      caughtError.locations.get(0) should matchPattern {
+        case SourceLocation(1, 2) =>
+      }
+
       (the [GraphQLError] thrownBy parse("""  { ...MissingOn }
                                            |  fragment MissingOn Type
                                            |""".stripMargin)).message should

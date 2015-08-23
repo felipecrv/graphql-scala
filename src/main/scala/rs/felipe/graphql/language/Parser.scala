@@ -323,7 +323,7 @@ object Parser {
 
     def parseConstValue: Value = parseValueLiteral(true)
 
-    def parseVariableValue: Value = parseValueLiteral(false)
+    def parseValueValue: Value = parseValueLiteral(false)
 
     def parseValueLiteral(isConst: Boolean): Value = {
       val _token = token
@@ -375,7 +375,7 @@ object Parser {
 
     def parseList(isConst: Boolean): ListValue = {
       val start = token.start
-      val item: ParseFn[Value] = if (isConst) _.parseConstValue else _.parseVariableValue
+      val item: ParseFn[Value] = if (isConst) _.parseConstValue else _.parseValueValue
       val values = any(TokenKind.BRACKET_L, item, TokenKind.BRACKET_R)
       ListValue(values, loc(start))
     }

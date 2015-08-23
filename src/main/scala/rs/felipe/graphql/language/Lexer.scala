@@ -103,6 +103,13 @@ object Lexer {
   private def charCodeAt(seq: CharSequence, index: Int): Int = Character.codePointAt(seq, index)
   private def fromCharCode(codePoints: Int*): String = new String(codePoints.toArray, 0, codePoints.length)
 
+  /**
+   * Gets the next token from the source starting at the given position.
+   *
+   * This skips over whitespace and comments until it finds the next lexable
+   * token, then lexes punctuators immediately or calls the appropriate helper
+   * function for more complicated tokens.
+   */
   def readToken(source: Source, fromPosition: Int): Token = {
     val body = source.body
     val bodyLength = body.length
@@ -244,9 +251,12 @@ object Lexer {
     var position = start
     var isFloat = false
 
+    def safeCharCodeAtPosition(pos: Int): Int =
+      if (pos >= body.length) 0 else charCodeAt(body, pos)
+
     def consumeCharCode: Int = {
       position += 1
-      if (position >= body.length) 0 else charCodeAt(body, position)
+      safeCharCodeAtPosition(position)
     }
 
     if (code == 45) { // -
@@ -255,25 +265,23 @@ object Lexer {
 
     if (code == 48) { // 0
       code = consumeCharCode
-    } else if (code >= 49 && code <= 57) { // 1 - 9
-      do {
-        code = consumeCharCode
-      } while (code >= 48 && code <= 57) // 0 - 9
+      if (code >= 48 && code <= 57) {
+        throw syntaxError(
+          source,
+          position,
+          s"""Invalid number, unexpected digit after 0: "${fromCharCode(code)}".""")
+      }
     } else {
-      throw syntaxError(source, position, "Invalid number.")
+      position = readDigits(source, position, code)
+      code = safeCharCodeAtPosition(position)
     }
 
     if (code == 46) { // .
       isFloat = true
 
       code = consumeCharCode
-      if (code >= 48 && code <= 57) { // 0 - 9
-        do {
-          code = consumeCharCode
-        } while (code >= 48 && code <= 57) // 0 - 9
-      } else {
-        throw syntaxError(source, position, "Invalid number.")
-      }
+      position = readDigits(source, position, code)
+      code = safeCharCodeAtPosition(position)
     }
 
     if (code == 69 || code == 101) { // E e
@@ -283,13 +291,7 @@ object Lexer {
       if (code == 43 || code == 45) { // + -
         code = consumeCharCode
       }
-      if (code >= 48 && code <= 57) { // 0 - 9
-        do {
-          code = consumeCharCode
-        } while (code >= 48 && code <= 57) // 0 - 9
-      } else {
-        throw syntaxError(source, position, "Invalid number.")
-      }
+      position = readDigits(source, position, code)
     }
 
     Token(
@@ -298,6 +300,29 @@ object Lexer {
       position,
       Some(body.substring(start, position))
     )
+  }
+
+  /**
+   * Returns the new position in the source after reading digits.
+   */
+  def readDigits(source: Source, start: Int, firstCode: Int): Int = {
+    val body = source.body
+    var position = start
+    var code = firstCode
+
+    if (code >= 48 && code <= 57) { // 0 - 9
+      do {
+        position += 1
+        code = if (position >= body.length) 0 else charCodeAt(body, position)
+      } while (code >= 48 && code <= 57) // 0 - 9
+      position
+    } else {
+      val got = if (code > 0) s""""${fromCharCode(code)}"""" else "EOF"
+      throw syntaxError(
+        source,
+        position,
+        s"Invalid number, expected digit but got: ${got}.")
+    }
   }
 
   /**
