@@ -46,7 +46,7 @@ object AST {
    *           ListType
    *           NonNullType
    */
-  abstract class Node(val kind: NodeKind) {
+  sealed abstract class Node(val kind: NodeKind) {
     val loc: Option[Location]
   }
 
@@ -60,14 +60,14 @@ object AST {
 
   case class Document(definitions: ArrayBuffer[Definition], loc: Option[Location]) extends Node("Document")
 
-  abstract class Definition(
+  sealed abstract class Definition(
     kind: NodeKind,
     directives: Option[ArrayBuffer[Directive]],
     selectionSet: SelectionSet) extends Node(kind)
 
-  abstract class Operation
-  object Query extends Operation
-  object Mutation extends Operation
+  sealed trait Operation
+  case object Query extends Operation
+  case object Mutation extends Operation
 
   object Operation {
     def apply(s: String): Operation = s match {
@@ -94,7 +94,7 @@ object AST {
 
   case class SelectionSet(selections: ArrayBuffer[Selection], loc: Option[Location]) extends Node("SelectionSet")
 
-  abstract class Selection(
+  sealed abstract class Selection(
     kind: NodeKind,
     directives: Option[ArrayBuffer[Directive]]) extends Node(kind)
 
@@ -135,7 +135,7 @@ object AST {
 
   // Values
 
-  abstract class Value(kind: NodeKind) extends Node(kind)
+  sealed abstract class Value(kind: NodeKind) extends Node(kind)
 
   case class IntValue(
     value: String,
@@ -171,7 +171,7 @@ object AST {
 
   // Types
 
-  abstract class Type(kind: NodeKind) extends Node(kind)
+  sealed abstract class Type(kind: NodeKind) extends Node(kind)
 
   case class NamedType(name: Name, loc: Option[Location]) extends Type("NamedType")
 

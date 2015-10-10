@@ -28,7 +28,7 @@ For a more comprehensive implementation of GraphQL tools in Scala check
 ## Getting Started
 
 An overview of GraphQL in general is available in the
-[facebook/graphql/README](https://github.com/facebook/graphql/blob/master/README.md)
+[README](https://github.com/facebook/graphql/blob/master/README.md)
 for the
 [Specification for GraphQL](https://github.com/facebook/graphql). That overview
 describes a simple set of GraphQL examples.
