@@ -13,6 +13,15 @@ class LexerSpec extends FunSpec {
   private def lexErr(str: String): Token = lex(Source(str))(None)
 
   describe("Lexer") {
+    it("disallows uncommon control characters") {
+      (the [GraphQLError] thrownBy { lexErr("\u0007") }).message should
+        startWith("Syntax Error GraphQL (1:1) Invalid character \"\\u0007\"");
+    }
+
+    it("accepts BOM header") {
+      lexOne("\uFEFF foo") shouldBe Token(TokenKind.NAME, 2, 5, Some("foo"))
+    }
+
     it("skips whitespace") {
       // Lex a name
       lexOne("""
@@ -67,12 +76,29 @@ class LexerSpec extends FunSpec {
     }
 
     it("lex reports useful string errors") {
+      (the [GraphQLError] thrownBy lexErr("\"")).message should
+        equal("""Syntax Error GraphQL (1:2) Unterminated string.
+                |
+                |1: "
+                |    ^
+                |""".stripMargin)
+
       (the [GraphQLError] thrownBy lexErr("\"no end quote")).message should
         equal("""Syntax Error GraphQL (1:14) Unterminated string.
                 |
                 |1: "no end quote
                 |                ^
                 |""".stripMargin)
+
+      (the [GraphQLError] thrownBy {
+        lexErr("\"contains unescaped \u0007 control char\"")
+      }).message should startWith(
+        "Syntax Error GraphQL (1:21) Invalid character within String: \"\\u0007\".")
+
+      (the [GraphQLError] thrownBy {
+        lexErr("\"null-byte is not \u0000 end of file\"")
+      }).message should startWith(
+        "Syntax Error GraphQL (1:19) Invalid character within String: \"\\u0000\".")
 
       (the [GraphQLError] thrownBy lexErr("\"multi\nline\"")).message should
         equal("""Syntax Error GraphQL (1:7) Unterminated string.
@@ -90,66 +116,50 @@ class LexerSpec extends FunSpec {
                 |2: line"
                 |""".stripMargin)
 
-      (the [GraphQLError] thrownBy lexErr("\"multi\u2028line\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Unterminated string.
-                |
-                |1: "multi
-                |         ^
-                |2: line"
-                |""".stripMargin)
-
-      (the [GraphQLError] thrownBy lexErr("\"multi\u2029line\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Unterminated string.
-                |
-                |1: "multi
-                |         ^
-                |2: line"
-                |""".stripMargin)
-
       (the [GraphQLError] thrownBy lexErr("\"bad \\z esc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: \z.
                 |
                 |1: "bad \z esc"
                 |         ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\"bad \\x esc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: \x.
                 |
                 |1: "bad \x esc"
                 |         ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\"bad \\u1 esc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: """ + "\\u1 es." + """
                 |
                 |1: "bad """.stripMargin + "\\u1 esc\"" + """
                 |         ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\"bad \\u0XX1 esc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: """ + "\\u0XX1." + """
                 |
                 |1: "bad """.stripMargin + "\\u0XX1 esc\"" + """
                 |         ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\"bad \\uXXXX sc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: """ + "\\uXXXX." + """
                 |
                 |1: "bad """.stripMargin + "\\uXXXX sc\"" + """
                 |         ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\"bad \\uFXXX esc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: """ + "\\uFXXX." + """
                 |
                 |1: "bad """.stripMargin + "\\uFXXX esc\"" + """
                 |         ^
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\"bad \\uXXXF esc\"")).message should
-        equal("""Syntax Error GraphQL (1:7) Bad character escape sequence.
+        equal("""Syntax Error GraphQL (1:7) Invalid character escape sequence: """ + "\\uXXXF." + """
                 |
                 |1: "bad """.stripMargin + "\\uXXXF esc\"" + """
                 |         ^
@@ -209,7 +219,7 @@ class LexerSpec extends FunSpec {
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.")).message should
-        equal("""Syntax Error GraphQL (1:3) Invalid number, expected digit but got: EOF.
+        equal("""Syntax Error GraphQL (1:3) Invalid number, expected digit but got: <EOF>.
                 |
                 |1: 1.
                 |     ^
@@ -237,7 +247,7 @@ class LexerSpec extends FunSpec {
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("1.0e")).message should
-        equal("""Syntax Error GraphQL (1:5) Invalid number, expected digit but got: EOF.
+        equal("""Syntax Error GraphQL (1:5) Invalid number, expected digit but got: <EOF>.
                 |
                 |1: 1.0e
                 |       ^
@@ -299,9 +309,16 @@ class LexerSpec extends FunSpec {
                 |""".stripMargin)
 
       (the [GraphQLError] thrownBy lexErr("\u203B")).message should
-        equal("""Syntax Error GraphQL (1:1) Unexpected character "\u203B".
+        equal("""Syntax Error GraphQL (1:1) Unexpected character """" + "\\u203B" + """".
                 |
                 |1: \u203B
+                |   ^
+                |""".stripMargin)
+
+      (the [GraphQLError] thrownBy lexErr("\u200B")).message should
+        equal("""Syntax Error GraphQL (1:1) Unexpected character """" + "\\u200B" + """".
+                |
+                |1: \u200B
                 |   ^
                 |""".stripMargin)
 

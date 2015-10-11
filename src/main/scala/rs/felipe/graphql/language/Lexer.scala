@@ -103,6 +103,32 @@ object Lexer {
   private def charCodeAt(seq: CharSequence, index: Int): Int = Character.codePointAt(seq, index)
   private def fromCharCode(codePoints: Int*): String = new String(codePoints.toArray, 0, codePoints.length)
 
+  private def printCharCode(code: Int): String = {
+    if (code < 0) {
+      "<EOF>"
+    } else {
+      code match {
+        case 34  => """\""""
+        case 47  => """"\/""""
+        case 92  => """"\\"""
+        case 127 => """"\b""""
+        case 10  => """"\n""""
+        case 9   => """"\t""""
+        case 12  => """"\f""""
+        case 13  => """"\r""""
+        case _ => {
+          if (code >= 32 && code < 0x007F) {
+            s""""${fromCharCode(code)}""""
+          } else {
+            val hex = "000" + Integer.toString(code, 16)
+            val slice = hex.substring(hex.length - 4, hex.length).toUpperCase
+            s""""\\u${slice}""""
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Gets the next token from the source starting at the given position.
    *
@@ -121,8 +147,16 @@ object Lexer {
 
     val code = charCodeAt(body, position)
 
+    // SourceCharacter
+    if (code < 0x0020 && code != 0x0009 && code != 0x000A && code != 0x000D) {
+      throw syntaxError(
+        source,
+        position,
+        s"""Invalid character ${printCharCode(code)}.""")
+    }
+
     def throwError: Token =
-      throw syntaxError(source, position, "Unexpected character \"" + fromCharCode(code) + "\".")
+      throw syntaxError(source, position,  s"""Unexpected character ${printCharCode(code)}.""")
 
     code match {
       // !
@@ -210,15 +244,20 @@ object Lexer {
     val bodyLength = body.length
 
     def isWhitespace(code: Int) =
-        code == 32 || // space
-        code == 44 || // comma
-        code == 160 || // '\xa0'
-        code == 0x2028 || // line separator
-        code == 0x2029 || // paragraph separator
-        code > 8 && code < 14 // whitespace
+      // BOM
+      code == 0xFEFF ||
+      // White Space
+      code == 0x0009 || // tab
+      code == 0x0020 || // space
+      // Line Terminator
+      code == 0x000A || // new line
+      code == 0x000D || // carriage return
+      // Comma
+      code == 0x002C
 
     def isNotEndOfComment(code: Int) =
-      code != 10 && code != 13 && code != 0x2028 && code != 0x2029
+      // SourceCharacter but not LineTerminator
+      (code > 0x001F || code == 0x0009) && code != 0x000A && code != 0x000D
 
     def aux(startPosition: Int): Int = {
       if (startPosition < bodyLength) {
@@ -252,7 +291,7 @@ object Lexer {
     var isFloat = false
 
     def safeCharCodeAtPosition(pos: Int): Int =
-      if (pos >= body.length) 0 else charCodeAt(body, pos)
+      if (pos >= body.length) -1 else charCodeAt(body, pos)
 
     def consumeCharCode: Int = {
       position += 1
@@ -269,7 +308,7 @@ object Lexer {
         throw syntaxError(
           source,
           position,
-          s"""Invalid number, unexpected digit after 0: "${fromCharCode(code)}".""")
+          s"""Invalid number, unexpected digit after 0: ${printCharCode(code)}.""")
       }
     } else {
       position = readDigits(source, position, code)
@@ -317,11 +356,10 @@ object Lexer {
       } while (code >= 48 && code <= 57) // 0 - 9
       position
     } else {
-      val got = if (code > 0) s""""${fromCharCode(code)}"""" else "EOF"
       throw syntaxError(
         source,
         position,
-        s"Invalid number, expected digit but got: ${got}.")
+        s"Invalid number, expected digit but got: ${printCharCode(code)}.")
     }
   }
 
@@ -337,20 +375,39 @@ object Lexer {
     var code = 0
     var value = new mutable.StringBuilder
 
+    def safeCharCodeAtPosition(pos: Int): Int =
+      if (pos >= body.length) {
+        throw syntaxError(source, body.length, "Unexpected character \"EOF\".")
+      } else {
+        charCodeAt(body, pos)
+      }
+
     def shouldContinue: Boolean = {
       if (position < body.length) {
         code = charCodeAt(body, position)
-        code != 34 && code != 10 && code != 13 && code != 0x2028 && code != 0x2029
+        // not LineTerminator
+        code != 0x000A && code != 0x000D &&
+        // not Quote (")
+        code != 34
       } else {
         false
       }
     }
 
     while (shouldContinue) {
+      // SourceCharacter
+      if (code < 0x0020 && code != 0x0009) {
+        throw syntaxError(
+          source,
+          position,
+          s"""Invalid character within String: ${printCharCode(code)}."""
+        )
+      }
+
       position += 1;
       if (code == 92) { // \
         value ++= body.substring(chunkStart, position - 1)
-        code = charCodeAt(body, position);
+        code = safeCharCodeAtPosition(position)
         code match {
           case 34 => value += '"'
           case 47 => value += '/'
@@ -360,27 +417,34 @@ object Lexer {
           case 110 => value += '\n'
           case 114 => value += '\r'
           case 116 => value += '\t'
-          case 117 => {
+          case 117 => { // u
             val charCode = uniCharCode(
-              charCodeAt(body, position + 1).toByte,
-              charCodeAt(body, position + 2).toByte,
-              charCodeAt(body, position + 3).toByte,
-              charCodeAt(body, position + 4).toByte
+              safeCharCodeAtPosition(position + 1).toByte,
+              safeCharCodeAtPosition(position + 2).toByte,
+              safeCharCodeAtPosition(position + 3).toByte,
+              safeCharCodeAtPosition(position + 4).toByte
             )
             if (charCode < 0) {
-              throw syntaxError(source, position, "Bad character escape sequence.")
+              val slice = body.substring(position + 1, position + 5)
+              throw syntaxError(
+                source,
+                position,
+                s"""Invalid character escape sequence: \\u${slice}.""")
             }
             value += fromCharCode(charCode).charAt(0)
             position += 4
           }
-          case _ => throw syntaxError(source, position, "Bad character escape sequence.")
+          case _ => throw syntaxError(
+            source,
+            position,
+            s"""Invalid character escape sequence: \\${fromCharCode(code)}.""")
         }
         position += 1
         chunkStart = position
       }
     }
 
-    if (code != 34) {
+    if (code != 34) { // quote (")
       throw syntaxError(source, position, "Unterminated string.")
     }
 

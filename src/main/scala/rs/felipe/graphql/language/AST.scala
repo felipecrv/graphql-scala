@@ -45,6 +45,17 @@ object AST {
    *       Type (abstract)
    *           ListType
    *           NonNullType
+   *       Definition (abstract)
+   *         TypeDefinition (abstract)
+   *           ObjectTypeDefinition
+   *           InterfaceTypeDefinition
+   *           UnionTypeDefinition
+   *           ScalarTypeDefinition
+   *           EnumTypeDefinition
+   *           InputObjectTypeDefinition
+   *           TypeExtensionDefinition
+   *        FieldDefinition
+   *        InputValueDefinition
    */
   sealed abstract class Node(val kind: NodeKind) {
     val loc: Option[Location]
@@ -60,19 +71,18 @@ object AST {
 
   case class Document(definitions: ArrayBuffer[Definition], loc: Option[Location]) extends Node("Document")
 
-  sealed abstract class Definition(
-    kind: NodeKind,
-    directives: Option[ArrayBuffer[Directive]],
-    selectionSet: SelectionSet) extends Node(kind)
+  sealed abstract class Definition(kind: NodeKind) extends Node(kind)
 
   sealed trait Operation
   case object Query extends Operation
   case object Mutation extends Operation
+  case object Subscription extends Operation
 
   object Operation {
     def apply(s: String): Operation = s match {
       case "query" => Query
       case "mutation" => Mutation
+      case "subscription" => Subscription
     }
   }
 
@@ -82,7 +92,7 @@ object AST {
     variableDefinitions: Option[ArrayBuffer[VariableDefinition]],
     directives: Option[ArrayBuffer[Directive]],
     selectionSet: SelectionSet,
-    loc: Option[Location]) extends Definition("OperationDefinition", directives, selectionSet)
+    loc: Option[Location]) extends Definition("OperationDefinition")
 
   case class VariableDefinition(
     variable: Variable,
@@ -92,7 +102,10 @@ object AST {
 
   case class Variable(name: Name, loc: Option[Location]) extends Value("Variable")
 
-  case class SelectionSet(selections: ArrayBuffer[Selection], loc: Option[Location]) extends Node("SelectionSet")
+  case class SelectionSet(
+    selections: ArrayBuffer[Selection],
+    loc: Option[Location]
+  ) extends Node("SelectionSet")
 
   sealed abstract class Selection(
     kind: NodeKind,
@@ -120,7 +133,7 @@ object AST {
     loc: Option[Location]) extends Selection("FragmentSpread", directives)
 
   case class InlineFragment(
-    typeCondition: NamedType,
+    typeCondition: Option[NamedType],
     directives: Option[ArrayBuffer[Directive]],
     selectionSet: SelectionSet,
     loc: Option[Location]) extends Selection("InlineFragment", directives)
@@ -130,7 +143,7 @@ object AST {
     typeCondition: NamedType,
     directives: Option[ArrayBuffer[Directive]],
     selectionSet: SelectionSet,
-    loc: Option[Location]) extends Definition("FragmentDefinition", directives, selectionSet)
+    loc: Option[Location]) extends Definition("FragmentDefinition")
 
 
   // Values
@@ -169,7 +182,7 @@ object AST {
     loc: Option[Location]) extends Node("Directive")
 
 
-  // Types
+  // Type Reference
 
   sealed abstract class Type(kind: NodeKind) extends Node(kind)
 
@@ -178,4 +191,68 @@ object AST {
   case class ListType(_type: Type, loc: Option[Location]) extends Type("ListType")
 
   case class NonNullType(_type: Either[NamedType, ListType], loc: Option[Location]) extends Type("NonNullType")
+
+  // Types
+
+  sealed abstract class TypeDefinition(kind: NodeKind) extends Definition(kind)
+
+  case class ObjectTypeDefinition(
+    name: Name,
+    interfaces: Option[ArrayBuffer[NamedType]],
+    fields: ArrayBuffer[FieldDefinition],
+    loc: Option[Location]
+  ) extends TypeDefinition("ObjectTypeDefinition")
+
+  case class FieldDefinition(
+    name: Name,
+    arguments: ArrayBuffer[InputValueDefinition],
+    _type: Type,
+    loc: Option[Location]
+  ) extends Node("FieldDefinition")
+
+  case class InputValueDefinition(
+    name: Name,
+    _type: Type,
+    defaultValue: Option[Value],
+    loc: Option[Location]
+  ) extends Node("InputValueDefinition")
+
+  case class InterfaceTypeDefinition(
+    name: Name,
+    fields: ArrayBuffer[FieldDefinition],
+    loc: Option[Location]
+  ) extends TypeDefinition("InterfaceTypeDefinition")
+
+  case class UnionTypeDefinition(
+    name: Name,
+    types: ArrayBuffer[NamedType],
+    loc: Option[Location]
+  ) extends TypeDefinition("UnionTypeDefinition")
+
+  case class ScalarTypeDefinition(
+    name: Name,
+    loc: Option[Location]
+  ) extends TypeDefinition("ScalarTypeDefinition")
+
+  case class EnumTypeDefinition(
+    name: Name,
+    values: ArrayBuffer[EnumValueDefinition],
+    loc: Option[Location]
+  ) extends TypeDefinition("EnumTypeDefinition")
+
+  case class EnumValueDefinition(
+    name: Name,
+    loc: Option[Location]
+  ) extends Node("EnumValueDefinition")
+
+  case class InputObjectTypeDefinition(
+    name: Name,
+    fields: ArrayBuffer[InputValueDefinition],
+    loc: Option[Location]
+  ) extends TypeDefinition("InputObjectTypeDefinition")
+
+  case class TypeExtensionDefinition(
+    definition: ObjectTypeDefinition,
+    loc: Option[Location]
+  ) extends TypeDefinition("TypeExtensionDefinition")
 }

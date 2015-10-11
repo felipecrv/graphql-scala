@@ -56,7 +56,7 @@ class ParserSpec extends FunSpec {
     it("parse provides useful error when using source") {
 
       (the [GraphQLError] thrownBy parse(Source("query", "MyQuery.graphql"))).message should
-        startWith("Syntax Error MyQuery.graphql (1:6) Expected Name, found EOF")
+        startWith("Syntax Error MyQuery.graphql (1:6) Expected {, found EOF")
     }
 
     it("parses variable inline values") {
@@ -66,11 +66,6 @@ class ParserSpec extends FunSpec {
     it("parses constant default values") {
       (the [GraphQLError] thrownBy parse("query Foo($x: Complex = { a: { b: [ $var ] } }) { field }")).message should
       startWith("Syntax Error GraphQL (1:37) Unexpected $")
-    }
-
-    it("duplicate keys in input object is syntax error") {
-      (the [GraphQLError] thrownBy parse("{ field(arg: { a: 1, a: 2 }) }")).message should
-        startWith("Syntax Error GraphQL (1:22) Duplicate input object field a.")
     }
 
     it("does not accept fragments named \"on\"") {
@@ -86,6 +81,21 @@ class ParserSpec extends FunSpec {
     it("does not allow null as value") {
       (the [GraphQLError] thrownBy parse("{ fieldWithNullableStringInput(input: null) }")).message
         startWith("Syntax Error GraphQL (1:39) Unexpected Name \"null\"")
+    }
+
+    it("parses multi-byte characters") {
+      // Note: \u0A0A could be naively interpretted as two line-feed chars.
+      val document = parse("""
+        # This comment has a \u0A0A multi-byte character.
+        { field(arg: "Has a \u0A0A multi-byte character.") }
+      """)
+
+      val definition = document.definitions.head.asInstanceOf[OperationDefinition]
+      val selection = definition.selectionSet.selections.head
+      val argument = selection.asInstanceOf[Field].arguments.get.head
+      argument.value should matchPattern {
+        case StringValue("Has a \u0A0A multi-byte character.", _) =>
+      }
     }
 
     it("parses kitchen sink") {
@@ -117,6 +127,22 @@ fragment $fragmentName on Type {
 }""")
         }
       }
+    }
+
+    it("parses experimental subscription feature") {
+      parse("""
+        subscription Foo {
+          subscriptionField
+        }
+      """)
+    }
+
+    it("parses anonymous operations") {
+      parse("""
+        mutation {
+          mutationField
+        }
+      """)
     }
 
     it("parse creates ast") {
